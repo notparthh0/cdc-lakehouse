@@ -1,0 +1,41 @@
+# Byte-compiled
+__pycache__/
+*.pyc
+
+# Virtual env
+venv/
+.venv/
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.backup
+*.tfvars
+!terraform.tfvars.example
+
+# GCP credentials
+*.json
+!connectors/*.json
+
+# Environment files (contain API keys)
+.env
+consumer/.env
+
+# AI diagnosis output
+ai_diagnoses.json
+consumer/ai_diagnoses.json
+
+# Local warehouse
+warehouse/
+
+# Docker volumes
+minio_data/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
