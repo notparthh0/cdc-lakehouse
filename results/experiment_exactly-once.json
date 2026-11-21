@@ -1,0 +1,133 @@
+{
+  "mode": "exactly-once",
+  "run_at": "2026-11-21T17:52:21",
+  "workload": {
+    "ops": 50000,
+    "rate": 1000.0,
+    "seed": 42,
+    "seconds": 50.0,
+    "events": {
+      "customers.c": 2948,
+      "customers.u": 2973,
+      "orders.c": 12504,
+      "orders.d": 3929,
+      "orders.u": 12554,
+      "products.c": 1928,
+      "products.d": 1035,
+      "products.u": 12129
+    }
+  },
+  "snapshot_rows": {
+    "customers": 50,
+    "products": 40,
+    "orders": 100
+  },
+  "achieved_ops_per_s": 1000,
+  "kill": {
+    "at_op": 25449,
+    "rows_committed_before_kill": 24943,
+    "polled_by_killed_process": 25453,
+    "in_flight_at_kill": 510,
+    "committed_after_restart": 25247
+  },
+  "events": {
+    "expected": 50190,
+    "missing": 0,
+    "extra": 0,
+    "duplicate_rows": 0,
+    "debezium_redeliveries": 0,
+    "per_table": {
+      "customers": {
+        "expected": {
+          "r": 50,
+          "c": 2948,
+          "u": 2973
+        },
+        "in_iceberg": {
+          "u": 2973,
+          "r": 50,
+          "c": 2948
+        },
+        "rows": 5971,
+        "duplicate_rows": 0,
+        "debezium_redeliveries": 0
+      },
+      "products": {
+        "expected": {
+          "r": 40,
+          "c": 1928,
+          "d": 1035,
+          "u": 12129
+        },
+        "in_iceberg": {
+          "r": 40,
+          "u": 12129,
+          "c": 1928,
+          "d": 1035
+        },
+        "rows": 15132,
+        "duplicate_rows": 0,
+        "debezium_redeliveries": 0
+      },
+      "orders": {
+        "expected": {
+          "r": 100,
+          "c": 12504,
+          "d": 3929,
+          "u": 12554
+        },
+        "in_iceberg": {
+          "r": 100,
+          "d": 3929,
+          "u": 12554,
+          "c": 12504
+        },
+        "rows": 29087,
+        "duplicate_rows": 0,
+        "debezium_redeliveries": 0
+      }
+    }
+  },
+  "current_state_vs_postgres": {
+    "customers": {
+      "postgres_rows": 2998,
+      "lake_rows": 2998,
+      "mismatched_rows": 0
+    },
+    "products": {
+      "postgres_rows": 933,
+      "lake_rows": 933,
+      "mismatched_rows": 0
+    },
+    "orders": {
+      "postgres_rows": 8675,
+      "lake_rows": 8675,
+      "mismatched_rows": 0
+    }
+  },
+  "schema_evolution_loyalty_tier": true,
+  "dbt": {
+    "pass": 18,
+    "warn": 0,
+    "error": 0
+  },
+  "lag_seconds": {
+    "p50_before_kill": 0.85,
+    "p95_before_kill": 1.42,
+    "max_including_restart": 4.7,
+    "clock_skew_s": -0.0
+  },
+  "vector_index": {
+    "events": 15132,
+    "embedded": 3108,
+    "deleted": 1035,
+    "lag_seconds_p50": 1.430641,
+    "lag_seconds_p95": 2.3320749,
+    "products": 933,
+    "indexed": 933,
+    "missing": 0,
+    "orphans": 0,
+    "stale": 0
+  },
+  "verdict": "PASS"
+}

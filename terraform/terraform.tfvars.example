@@ -1,3 +1,0 @@
-# Replace with your actual GCP project ID
-project_id = "your-gcp-project-id"
-region     = "asia-south1"

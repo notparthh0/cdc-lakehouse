@@ -1,0 +1,121 @@
+{
+  "mode": "naive",
+  "run_at": "2026-11-21T17:54:21",
+  "workload": {
+    "ops": 50000,
+    "rate": 1000.0,
+    "seed": 42,
+    "seconds": 50.0,
+    "events": {
+      "customers.c": 2948,
+      "customers.u": 2973,
+      "orders.c": 12504,
+      "orders.d": 3929,
+      "orders.u": 12554,
+      "products.c": 1928,
+      "products.d": 1035,
+      "products.u": 12129
+    }
+  },
+  "snapshot_rows": {
+    "customers": 50,
+    "products": 40,
+    "orders": 100
+  },
+  "achieved_ops_per_s": 1000,
+  "kill": {
+    "at_op": 25010,
+    "rows_committed_before_kill": 24093,
+    "polled_by_killed_process": 24599,
+    "in_flight_at_kill": 506,
+    "committed_after_restart": 26608
+  },
+  "events": {
+    "expected": 50190,
+    "missing": 0,
+    "extra": 0,
+    "duplicate_rows": 511,
+    "debezium_redeliveries": 0,
+    "per_table": {
+      "customers": {
+        "expected": {
+          "r": 50,
+          "c": 2948,
+          "u": 2973
+        },
+        "in_iceberg": {
+          "r": 50,
+          "u": 2973,
+          "c": 2948
+        },
+        "rows": 6031,
+        "duplicate_rows": 60,
+        "debezium_redeliveries": 0
+      },
+      "products": {
+        "expected": {
+          "r": 40,
+          "c": 1928,
+          "d": 1035,
+          "u": 12129
+        },
+        "in_iceberg": {
+          "r": 40,
+          "u": 12129,
+          "d": 1035,
+          "c": 1928
+        },
+        "rows": 15272,
+        "duplicate_rows": 140,
+        "debezium_redeliveries": 0
+      },
+      "orders": {
+        "expected": {
+          "r": 100,
+          "c": 12504,
+          "d": 3929,
+          "u": 12554
+        },
+        "in_iceberg": {
+          "r": 100,
+          "u": 12554,
+          "d": 3929,
+          "c": 12504
+        },
+        "rows": 29398,
+        "duplicate_rows": 311,
+        "debezium_redeliveries": 0
+      }
+    }
+  },
+  "current_state_vs_postgres": {
+    "customers": {
+      "postgres_rows": 2998,
+      "lake_rows": 2998,
+      "mismatched_rows": 0
+    },
+    "products": {
+      "postgres_rows": 933,
+      "lake_rows": 933,
+      "mismatched_rows": 0
+    },
+    "orders": {
+      "postgres_rows": 8675,
+      "lake_rows": 8675,
+      "mismatched_rows": 0
+    }
+  },
+  "schema_evolution_loyalty_tier": true,
+  "dbt": {
+    "pass": 18,
+    "warn": 0,
+    "error": 0
+  },
+  "lag_seconds": {
+    "p50_before_kill": 0.85,
+    "p95_before_kill": 1.42,
+    "max_including_restart": 45.54,
+    "clock_skew_s": -0.001
+  },
+  "verdict": "FAIL"
+}

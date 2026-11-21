@@ -1,41 +1,19 @@
-# Byte-compiled
 __pycache__/
 *.pyc
-
-# Virtual env
-venv/
 .venv/
+.pytest_cache/
 
-# Terraform
-.terraform/
-*.tfstate
-*.tfstate.backup
-*.tfvars
-!terraform.tfvars.example
-
-# GCP credentials
-*.json
-!connectors/*.json
-
-# Environment files (contain API keys)
+# secrets
 .env
-consumer/.env
 
-# AI diagnosis output
-ai_diagnoses.json
-consumer/ai_diagnoses.json
-
-# Local warehouse
+# generated: Iceberg warehouse, DuckDB file, dbt build output, logs
 warehouse/
+dbt/target/
+dbt/logs/
+logs/
 
-# Docker volumes
-minio_data/
-
-# IDE
+graphify-out/
+.DS_Store
 .idea/
 .vscode/
-*.swp
-
-# OS
-.DS_Store
-Thumbs.db
+dbt/.user.yml

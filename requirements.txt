@@ -1,0 +1,8 @@
+# Python 3.12 (uv venv --python 3.12 .venv && uv pip install -r requirements.txt)
+confluent-kafka>=2.6
+pyiceberg[sql-sqlite,pyarrow]>=0.10
+psycopg[binary]>=3.2
+dbt-duckdb>=1.9
+duckdb>=1.2
+fastembed>=0.5
+pytest>=8.0

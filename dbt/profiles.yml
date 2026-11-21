@@ -1,0 +1,15 @@
+# DuckDB reads the Iceberg changelog through the same PyIceberg SQL catalog the sink writes to.
+cdc_lakehouse:
+  target: dev
+  outputs:
+    dev:
+      type: duckdb
+      path: "{{ env_var('WAREHOUSE') }}/analytics.duckdb"
+      threads: 1
+      plugins:
+        - module: iceberg
+          config:
+            catalog: lakehouse
+            type: sql
+            uri: "sqlite:///{{ env_var('WAREHOUSE') }}/catalog.db"
+            warehouse: "file://{{ env_var('WAREHOUSE') }}"
