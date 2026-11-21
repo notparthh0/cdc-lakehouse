@@ -71,7 +71,10 @@ def run(until_idle=None, status_path=None, embed=None):
         embed = lambda texts: list(encoder.embed(texts))  # noqa: E731
     db = psycopg.connect(SEARCH_DSN, autocommit=True)  # so db.transaction() below is a real COMMIT, not a savepoint
     consumer = Consumer({"bootstrap.servers": KAFKA_BOOTSTRAP, "group.id": "vector-sync",
-                         "enable.auto.commit": False, "auto.offset.reset": "earliest"})
+                         "enable.auto.commit": False, "auto.offset.reset": "earliest",
+                         # after a crash the group waits this long before handing partitions to the restarted
+                         # process; the 45 s default showed up as 45 s of index lag (broker minimum is 6 s)
+                         "session.timeout.ms": 6000})
     consumer.subscribe([TOPIC])
     stats = {"events": 0, "embedded": 0, "deleted": 0}
     lags = []  # Postgres commit -> row in pgvector, per embedded change (snapshot rows excluded); one clock

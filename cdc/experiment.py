@@ -4,6 +4,8 @@ All checks are against ground truth, never against the pipeline's own counters:
   * events: every change the workload made is in Iceberg exactly once (no missing, no duplicate rows)
   * state:  dbt's *_current tables equal the Postgres tables row for row, every column
   * index:  the pgvector index holds every live product with its current text (exactly-once mode)
+--mode faults kills Kafka Connect (Debezium) and the vector sync instead of the sink, to test the
+at-least-once parts: Debezium re-sends after a crash (dbt dedupes), the vector sync replays (idempotent).
 Writes results/experiment_<mode>.json. Expects a fresh stack (make experiment runs reset + up first).
 """
 from __future__ import annotations
@@ -17,6 +19,7 @@ import subprocess
 import sys
 import threading
 import time
+import urllib.request
 from datetime import datetime, timezone
 
 import duckdb
@@ -76,18 +79,28 @@ def clock_skew() -> float:
     return pg - (t0 + t1) / 2
 
 
+def connector_running() -> bool:
+    try:
+        with urllib.request.urlopen("http://localhost:8083/connectors/ecommerce-source/status", timeout=2) as r:
+            status = json.load(r)
+    except (OSError, ValueError):  # Connect still starting: refused, reset, 404
+        return False
+    tasks = status.get("tasks", [])
+    return status["connector"]["state"] == "RUNNING" and bool(tasks) and all(t["state"] == "RUNNING" for t in tasks)
+
+
 def main(ops: int, rate: float, mode: str, kill_at: float, seed: int) -> dict:
-    naive = mode == "naive"
+    naive, faults = mode == "naive", mode == "faults"
     os.makedirs(WAREHOUSE, exist_ok=True)
     log = open(os.path.join(WAREHOUSE, f"experiment_{mode}.log"), "w")
     with psycopg.connect(PG_DSN) as c:
         seed_rows = {t: c.execute(f"SELECT count(*) FROM {t}").fetchone()[0] for t in TABLES}
 
-    sink_args = ["cdc.sink", "--until-idle", "15", "--status", SINK_STATUS] + (["--naive"] if naive else [])
+    idle = "120" if faults else "15"  # a Connect restart pauses the stream for tens of seconds
+    sink_args = ["cdc.sink", "--until-idle", idle, "--status", SINK_STATUS] + (["--naive"] if naive else [])
+    vector_args = ["cdc.vector_sync", "--until-idle", "120" if faults else "30", "--status", VECTOR_STATUS]
     sink = start(sink_args, log)
-    vector = None
-    if not naive:
-        vector = start(["cdc.vector_sync", "--until-idle", "30", "--status", VECTOR_STATUS], log)
+    vector = None if naive else start(vector_args, log)
     wait_until(lambda: read_json(SINK_STATUS).get("committed", 0) >= sum(seed_rows.values()), 180, "snapshot")
     print(f"snapshot in Iceberg ({sum(seed_rows.values())} rows); starting {ops} ops at {rate}/s", flush=True)
 
@@ -95,28 +108,59 @@ def main(ops: int, rate: float, mode: str, kill_at: float, seed: int) -> dict:
     worker = threading.Thread(target=lambda: truth.update(workload.run(ops, rate, seed, progress=progress)))
     worker.start()
 
-    def in_flight():  # events the sink has read but not yet committed to Iceberg
-        status = read_json(SINK_STATUS)
-        return status.get("polled", 0) - status.get("committed", 0)
-
-    # kill between two flushes, while the sink holds uncommitted events; right after a flush the kill tests nothing
-    wait_until(lambda: progress.get("done", 0) >= ops * kill_at and in_flight() > 0, ops / rate * 3 + 60, "kill point")
-    before = read_json(SINK_STATUS)
-    killed_at_op = progress["done"]
-    os.kill(sink.pid, signal.SIGKILL)
-    sink.wait()
-    kill_time = utcnow()
-    con = changelogs()
-    committed_before_kill = sum(con.execute(f"SELECT count(*) FROM {t}_changes").fetchone()[0] for t in TABLES)
-    print(f"SIGKILL at op {killed_at_op}: {committed_before_kill} rows committed, "
-          f"process had polled {before.get('polled')}", flush=True)
-    time.sleep(2)
-    sink = start(sink_args, log)
-    worker.join()
-    sink.wait()
-    after = read_json(SINK_STATUS)
-    if vector:
+    if faults:
+        # 1) kill -9 the vector sync; the new process resumes from its last committed Kafka offset
+        wait_until(lambda: progress.get("done", 0) >= ops * 0.4, ops / rate * 3 + 60, "vector-sync kill point")
+        vector_before = read_json(VECTOR_STATUS)
+        vector_killed_at = progress["done"]
+        os.kill(vector.pid, signal.SIGKILL)
         vector.wait()
+        time.sleep(2)
+        vector = start(vector_args, log)
+        # 2) kill -9 Kafka Connect: Debezium resumes from its last flushed source offset and re-sends what followed
+        wait_until(lambda: progress.get("done", 0) >= ops * 0.6, ops / rate * 3 + 60, "connect kill point")
+        connect_killed_at = progress["done"]
+        kill_time = utcnow()
+        t0 = time.time()
+        subprocess.run(["docker", "kill", "cdc-connect"], check=True, capture_output=True)
+        subprocess.run(["docker", "start", "cdc-connect"], check=True, capture_output=True)
+        wait_until(connector_running, 300, "connector restart")
+        connect_down_s = round(time.time() - t0, 1)
+        print(f"vector sync killed at op {vector_killed_at}; Kafka Connect killed at op {connect_killed_at}, "
+              f"back after {connect_down_s} s", flush=True)
+        worker.join()
+        sink.wait()
+        vector.wait()
+        kill = {"vector_sync_killed_at_op": vector_killed_at,
+                "vector_events_committed_before_kill": vector_before.get("events", 0),
+                "connect_killed_at_op": connect_killed_at, "connect_down_s": connect_down_s}
+    else:
+        def in_flight():  # events the sink has read but not yet committed to Iceberg
+            status = read_json(SINK_STATUS)
+            return status.get("polled", 0) - status.get("committed", 0)
+
+        # kill between two flushes, while the sink holds uncommitted events; right after a flush the kill tests nothing
+        wait_until(lambda: progress.get("done", 0) >= ops * kill_at and in_flight() > 0, ops / rate * 3 + 60, "kill point")
+        before = read_json(SINK_STATUS)
+        killed_at_op = progress["done"]
+        os.kill(sink.pid, signal.SIGKILL)
+        sink.wait()
+        kill_time = utcnow()
+        con = changelogs()
+        committed_before_kill = sum(con.execute(f"SELECT count(*) FROM {t}_changes").fetchone()[0] for t in TABLES)
+        print(f"SIGKILL at op {killed_at_op}: {committed_before_kill} rows committed, "
+              f"process had polled {before.get('polled')}", flush=True)
+        time.sleep(2)
+        sink = start(sink_args, log)
+        worker.join()
+        sink.wait()
+        after = read_json(SINK_STATUS)
+        if vector:
+            vector.wait()
+        kill = {"at_op": killed_at_op, "rows_committed_before_kill": committed_before_kill,
+                "polled_by_killed_process": before.get("polled"),
+                "in_flight_at_kill": max(0, before.get("polled", 0) - committed_before_kill),
+                "committed_after_restart": after.get("committed")}
 
     dbt = subprocess.run([os.path.join(os.path.dirname(sys.executable), "dbt"), "build", "--profiles-dir", "."],
                          cwd=os.path.join(ROOT, "dbt"), capture_output=True, text=True,
@@ -162,10 +206,7 @@ def main(ops: int, rate: float, mode: str, kill_at: float, seed: int) -> dict:
         "mode": mode, "run_at": utcnow().isoformat(timespec="seconds"), "workload": truth,
         "snapshot_rows": seed_rows,
         "achieved_ops_per_s": round(ops / truth["seconds"]),
-        "kill": {"at_op": killed_at_op, "rows_committed_before_kill": committed_before_kill,
-                 "polled_by_killed_process": before.get("polled"),
-                 "in_flight_at_kill": max(0, before.get("polled", 0) - committed_before_kill),
-                 "committed_after_restart": after.get("committed")},
+        "kill": kill,
         "events": {"expected": expected_total, "missing": missing, "extra": extra,
                    "duplicate_rows": sum(v["duplicate_rows"] for v in per_table.values()),
                    "debezium_redeliveries": sum(v["debezium_redeliveries"] for v in per_table.values()),
@@ -180,9 +221,14 @@ def main(ops: int, rate: float, mode: str, kill_at: float, seed: int) -> dict:
     if vector:
         result["vector_index"] = {**read_json(VECTOR_STATUS), **consistency()}
 
+    # each fault must have hit something, otherwise the run tested nothing
+    if faults:
+        hit = result["events"]["debezium_redeliveries"] > 0 and kill["vector_events_committed_before_kill"] > 0
+    else:
+        hit = kill["in_flight_at_kill"] > 0
     ok = (missing == extra == result["events"]["duplicate_rows"] == 0
           and all(s["mismatched_rows"] == 0 for s in state.values())
-          and result["kill"]["in_flight_at_kill"] > 0  # otherwise the kill tested nothing
+          and hit
           and result["dbt"].get("error") == 0
           and (not vector or result["vector_index"]["missing"] == result["vector_index"]["stale"]
                == result["vector_index"]["orphans"] == 0))
@@ -197,7 +243,7 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--ops", type=int, default=50000)
     ap.add_argument("--rate", type=float, default=1000)
-    ap.add_argument("--mode", choices=["exactly-once", "naive"], default="exactly-once")
+    ap.add_argument("--mode", choices=["exactly-once", "naive", "faults"], default="exactly-once")
     ap.add_argument("--kill-at", type=float, default=0.5, help="fraction of the workload done when the sink is killed")
     ap.add_argument("--seed", type=int, default=42)
     a = ap.parse_args()

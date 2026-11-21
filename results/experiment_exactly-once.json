@@ -1,6 +1,6 @@
 {
   "mode": "exactly-once",
-  "run_at": "2026-11-21T17:52:21",
+  "run_at": "2026-11-21T19:19:30",
   "workload": {
     "ops": 50000,
     "rate": 1000.0,
@@ -24,11 +24,11 @@
   },
   "achieved_ops_per_s": 1000,
   "kill": {
-    "at_op": 25449,
-    "rows_committed_before_kill": 24943,
-    "polled_by_killed_process": 25453,
-    "in_flight_at_kill": 510,
-    "committed_after_restart": 25247
+    "at_op": 25027,
+    "rows_committed_before_kill": 23766,
+    "polled_by_killed_process": 24787,
+    "in_flight_at_kill": 1021,
+    "committed_after_restart": 26424
   },
   "events": {
     "expected": 50190,
@@ -44,9 +44,9 @@
           "u": 2973
         },
         "in_iceberg": {
-          "u": 2973,
           "r": 50,
-          "c": 2948
+          "c": 2948,
+          "u": 2973
         },
         "rows": 5971,
         "duplicate_rows": 0,
@@ -61,8 +61,8 @@
         },
         "in_iceberg": {
           "r": 40,
-          "u": 12129,
           "c": 1928,
+          "u": 12129,
           "d": 1035
         },
         "rows": 15132,
@@ -79,8 +79,8 @@
         "in_iceberg": {
           "r": 100,
           "d": 3929,
-          "u": 12554,
-          "c": 12504
+          "c": 12504,
+          "u": 12554
         },
         "rows": 29087,
         "duplicate_rows": 0,
@@ -112,17 +112,17 @@
     "error": 0
   },
   "lag_seconds": {
-    "p50_before_kill": 0.85,
-    "p95_before_kill": 1.42,
-    "max_including_restart": 4.7,
-    "clock_skew_s": -0.0
+    "p50_before_kill": 0.83,
+    "p95_before_kill": 1.41,
+    "max_including_restart": 5.3,
+    "clock_skew_s": -0.001
   },
   "vector_index": {
     "events": 15132,
-    "embedded": 3108,
+    "embedded": 3136,
     "deleted": 1035,
-    "lag_seconds_p50": 1.430641,
-    "lag_seconds_p95": 2.3320749,
+    "lag_seconds_p50": 1.4505495,
+    "lag_seconds_p95": 2.3952109999999998,
     "products": 933,
     "indexed": 933,
     "missing": 0,

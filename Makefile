@@ -6,7 +6,7 @@ OPS  ?= 50000
 RATE ?= 1000
 MODE ?= exactly-once
 
-.PHONY: up down reset connector sink vector-sync workload dbt experiment experiment-naive search test
+.PHONY: up down reset connector sink vector-sync workload dbt experiment experiment-naive experiment-faults search test
 
 up:                      ## start Postgres, Kafka, Debezium; register the connector (snapshot starts)
 	docker compose up -d --wait
@@ -40,6 +40,9 @@ experiment: reset up     ## the measured run: workload + kill -9 of the sink mid
 
 experiment-naive:        ## same run with the v1 consumer design (Kafka auto-commit) as the baseline
 	$(MAKE) --no-print-directory experiment MODE=naive
+
+experiment-faults:       ## kill -9 Kafka Connect (Debezium) and the vector sync mid-run instead of the sink
+	$(MAKE) --no-print-directory experiment MODE=faults
 
 search:                  ## semantic product search over the CDC-fed index, e.g. make search Q="gift for a runner"
 	$(PYTHON) -m cdc.vector_sync --search "$(Q)"

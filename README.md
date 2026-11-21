@@ -24,22 +24,40 @@ the code, with the same seed, also passed.
 | What | Measured |
 |---|---|
 | Workload | 50,000 random inserts, updates and deletes across 3 tables at 1,000 ops/s, plus 190 snapshot rows |
-| Fault | the sink was `kill -9`ed at op 25,449, holding 510 events it had read but not committed |
-| Events in Iceberg | **50,190 of 50,190**, 0 missing, 0 duplicate rows; the restarted sink committed exactly the remaining 25,247 |
+| Fault | the sink was `kill -9`ed at op 25,027, holding 1,021 events it had read but not committed |
+| Events in Iceberg | **50,190 of 50,190**, 0 missing, 0 duplicate rows; the restarted sink committed exactly the remaining 26,424 |
 | Current state vs Postgres | **12,606 of 12,606 rows identical**, every column, after dbt |
 | Schema change mid-run | `ALTER TABLE customers ADD COLUMN loyalty_tier` at 75% of the run: the Iceberg table gained the column without a restart |
-| Lag, Postgres commit → Iceberg commit | p50 0.85 s, p95 1.42 s (before the kill); 4.7 s worst case, across the kill and restart |
+| Lag, Postgres commit → Iceberg commit | p50 0.83 s, p95 1.41 s (before the kill); 5.3 s worst case, across the kill and restart |
 | dbt | 18 of 18 models and tests pass |
-| Vector index | 933 of 933 live products indexed with their current text (0 missing, 0 stale, 0 orphaned); p95 2.3 s from Postgres commit to searchable; 3,108 embeddings for 15,132 product change events |
+| Vector index | 933 of 933 live products indexed with their current text (0 missing, 0 stale, 0 orphaned); p95 2.4 s from Postgres commit to searchable; 3,136 embeddings for 15,132 product change events |
 
 **Baseline:** the v1 version of this repo used a consumer with Kafka auto-commit. The same workload and the same kill
 ([`results/experiment_naive.json`](results/experiment_naive.json)) gave:
-- **511 duplicate rows** in Iceberg (an earlier run gave 2,550: the count depends on where the kill falls in the
-  5-second auto-commit interval);
+- **1,021 duplicate rows** in Iceberg (earlier runs gave 511 and 2,550: the count depends on where the kill falls in
+  the 5-second auto-commit interval);
 - a **46 s stall** while the consumer group waited for the dead member's session to expire.
 
 Its final state was still correct, but only because dbt dedupes on (id, LSN). Auto-commit can also *lose* events: an
 offset can be committed before its row is written. That did not happen in this run.
+
+### Fault tests: Kafka Connect and the vector sync
+
+`make experiment-faults` runs the same workload but kills the other two moving parts instead of the sink
+([`results/experiment_faults.json`](results/experiment_faults.json)):
+- **Vector sync** `kill -9` at op 20,019, restarted: the index still ended exact (933 of 933, 0 stale, 0 orphaned).
+- **Kafka Connect (Debezium)** `docker kill` at op 30,019, back in 3.7 s. Debezium resumed from its last saved position
+  and **re-sent 1,532 events**. dbt's dedupe on (id, LSN) removed every one: 0 missing, 0 extra, and 12,606 of 12,606
+  rows equal to Postgres. The run fails unless Debezium really re-sent something.
+
+**A bug this test found.** On the first try Kafka Connect still had its default: save Debezium's position every
+**60 s**. The kill came before the first save, so on restart Debezium had no position and **re-ran the whole initial
+snapshot**. A snapshot only shows rows that exist, so every delete made in the gap was lost: **602 deleted orders and 15
+deleted products stayed "current" in the lake** and in the vector index
+([`results/experiment_faults_60s_offset_flush.json`](results/experiment_faults_60s_offset_flush.json)). The fix is
+`OFFSET_FLUSH_INTERVAL_MS: 1000` in `docker-compose.yml`, which also keeps re-sends to about a second of events.
+The same run showed the restarted vector sync waiting 45 s for its partitions (Kafka's default group session timeout).
+It now uses 6 s, the broker minimum, and post-crash index lag fell from p95 45 s to 9.5 s.
 
 ## How it works
 
@@ -89,6 +107,7 @@ uv venv --python 3.12 .venv && uv pip install -r requirements.txt   # or python 
 make test                # 9 tests incl. a real dbt build over an Iceberg changelog; no Docker needed
 make experiment          # fresh stack -> 50k changes -> kill -9 mid-run -> verification (~2 min)
 make experiment-naive    # the auto-commit baseline (reports FAIL by design)
+make experiment-faults   # kill Kafka Connect and the vector sync instead of the sink
 ```
 
 Piece by piece:
@@ -131,9 +150,11 @@ WHERE valid_from <= TIMESTAMP '2026-11-21 17:40:00' AND coalesce(valid_to, 'infi
 - **Full rebuilds.** dbt rebuilds the history tables on every run. That is fine at this size; incremental models are
   the next step.
 - **Primary keys.** The key column is assumed to be `id`, and SCD2 `valid_from` for snapshot rows is the snapshot time.
-- **Kafka Connect crash.** Not tested. Debezium is at-least-once; the (id, LSN) dedupe is meant to cover it, but this
-  has not been measured. That key holds inside multi-row transactions: checked by hand, two updates of the same row in
-  one transaction got distinct LSNs. A kill of the vector sync has not been measured either.
+- **Re-snapshots lose deletes.** If Kafka Connect dies before its first position save (now within about 1 s of a
+  fresh start) or its offsets are lost, Debezium re-runs the snapshot, and deletes in the gap never arrive. Recovery
+  then means rebuilding the lake from a fresh snapshot. This is not automated.
+- **(id, LSN) as the dedupe key.** It holds inside multi-row transactions: checked by hand, two updates of the same row
+  in one transaction got distinct LSNs.
 - **Embedding savings.** How many embeddings get skipped depends on the workload mix: most product changes here are
   price and stock updates. The index-lag percentiles cover every re-embedding after the snapshot.
 - **Local only.** There is no cloud deployment. The lag is measured to the start of the Iceberg commit.

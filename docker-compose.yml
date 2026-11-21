@@ -63,6 +63,10 @@ services:
       CONFIG_STORAGE_TOPIC: _connect_configs
       OFFSET_STORAGE_TOPIC: _connect_offsets
       STATUS_STORAGE_TOPIC: _connect_status
+      # Save Debezium's position every 1 s, not the default 60 s. If Connect crashes before its first save, Debezium
+      # re-runs the initial snapshot, and deletes made in the gap never reach the lake
+      # (measured: results/experiment_faults_60s_offset_flush.json). A shorter interval also means fewer re-sends.
+      OFFSET_FLUSH_INTERVAL_MS: 1000
     healthcheck:
       test: ["CMD-SHELL", "curl -sf localhost:8083/connectors"]
       interval: 3s
