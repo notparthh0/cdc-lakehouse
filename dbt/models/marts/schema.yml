@@ -1,0 +1,21 @@
+models:
+  - name: customers_history
+    description: SCD Type 2 history of customers, one row per version, rebuilt from every captured change.
+    data_tests: [valid_scd2]
+  - name: products_history
+    data_tests: [valid_scd2]
+  - name: orders_history
+    data_tests: [valid_scd2]
+  - name: customers_current
+    description: Current state of customers; the experiment compares it row for row with Postgres.
+    columns:
+      - name: id
+        data_tests: [unique, not_null]
+  - name: products_current
+    columns:
+      - name: id
+        data_tests: [unique, not_null]
+  - name: orders_current
+    columns:
+      - name: id
+        data_tests: [unique, not_null]

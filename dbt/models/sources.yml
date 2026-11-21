@@ -1,0 +1,11 @@
+sources:
+  - name: cdc
+    description: Append-only Iceberg changelogs written by cdc/sink.py, one row per Debezium event.
+    schema: cdc
+    meta:
+      plugin: iceberg
+      iceberg_table: "cdc.{identifier}"
+    tables:
+      - name: customers_changes
+      - name: products_changes
+      - name: orders_changes

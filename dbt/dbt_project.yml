@@ -1,0 +1,13 @@
+name: cdc_lakehouse
+version: "1.0.0"
+profile: cdc_lakehouse
+model-paths: ["models"]
+macro-paths: ["macros"]
+test-paths: ["tests"]
+
+models:
+  cdc_lakehouse:
+    staging:
+      +materialized: view
+    marts:
+      +materialized: table
