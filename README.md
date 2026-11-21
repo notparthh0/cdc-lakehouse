@@ -46,8 +46,10 @@ offset can be committed before its row is written. That did not happen in this r
 `make experiment-faults` runs the same workload but kills the other two moving parts instead of the sink
 ([`results/experiment_faults.json`](results/experiment_faults.json)):
 - **Vector sync** `kill -9` at op 20,019, restarted: the index still ended exact (933 of 933, 0 stale, 0 orphaned).
-- **Kafka Connect (Debezium)** `docker kill` at op 30,019, back in 3.7 s. Debezium resumed from its last saved position
-  and **re-sent 1,532 events**. dbt's dedupe on (id, LSN) removed every one: 0 missing, 0 extra, and 12,606 of 12,606
+- **Kafka Connect (Debezium)** `docker kill` at op 30,019, restarted at once. Its REST API reported the connector
+  RUNNING after 3.7 s, and the worst Postgres-to-Iceberg delay in the run was 12.1 s (that maximum also counts re-sent
+  copies, which carry their original commit time). Debezium resumed from its last saved position and **re-sent 1,532
+  events**. dbt's dedupe on (id, LSN) removed every one: 0 missing, 0 extra, and 12,606 of 12,606
   rows equal to Postgres. The run fails unless Debezium really re-sent something.
 
 **A bug this test found.** On the first try Kafka Connect still had its default: save Debezium's position every
